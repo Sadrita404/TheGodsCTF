@@ -6,6 +6,16 @@ import { useWindows } from "@/store/windowStore";
 
 const charById = Object.fromEntries(characters.map((c) => [c.id, c]));
 
+/** Each investigator's lens is a one-shot mission ability — it exposes the
+    red herrings for free (priceless in Professional mode, where they're
+    otherwise unmarked) with character-specific flavour. */
+const LENS: Record<string, { label: string; flavour: string }> = {
+  nikhil: { label: "🔬 Lab sweep", flavour: "Lab sweep: the flagged cards don't survive forensic scrutiny — they're noise." },
+  nusrat: { label: "🪪 Read the room", flavour: "Read the room: the flagged accounts feel rehearsed. Discount them." },
+  dj: { label: "⭐ Pull rank", flavour: "Pulled rank: a source confirms the flagged leads were planted to waste your time." },
+  shubh: { label: "🜲 Oracle", flavour: "The Oracle sees it: the flagged threads were never the path." },
+};
+
 function shuffle<T>(arr: T[], seed: number): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -31,7 +41,10 @@ export function MissionView({ mission }: { mission: Mission }) {
   const [verdict, setVerdict] = useState<null | "ok" | "no">(solved ? "ok" : null);
   const [hints, setHints] = useState<string[]>([]);
   const [walk, setWalk] = useState(false);
+  const [lensUsed, setLensUsed] = useState(false);
   const mcq = useMemo(() => shuffle(mission.mcqOptions, mission.order + 3), [mission]);
+  const lens = LENS[mission.characterId]!;
+  const hasHerrings = mission.evidence.some((e) => e.redHerring);
 
   const submit = (val: string) => {
     const res = capture(mission, val);
@@ -43,6 +56,12 @@ export function MissionView({ mission }: { mission: Mission }) {
     const r = buyHint(mission);
     if (!r) { setHints((h) => [...h, "— no more hints —"]); return; }
     setHints((h) => [...h, `💡 (-${r.cost}pts) ${r.text}`]);
+  };
+
+  const useLens = () => {
+    if (lensUsed) return;
+    setLensUsed(true);
+    setHints((h) => [...h, `${ch.glyph} ${lens.flavour}`]);
   };
 
   const tools = (
@@ -57,6 +76,11 @@ export function MissionView({ mission }: { mission: Mission }) {
       )}
       {(mission.labTool === "map" || mission.code === "S1E07") && (
         <button className="tool-btn" onClick={() => open({ id: "map", title: "GEO-MAP", icon: "🗺" })}>🗺 geo-map</button>
+      )}
+      {hasHerrings && (
+        <button className="tool-btn" style={{ color: ch.color, borderColor: ch.color }} onClick={useLens} disabled={lensUsed} title={`${ch.name}'s ${ch.lens} ability`}>
+          {lens.label}{lensUsed ? " ✓" : ""}
+        </button>
       )}
       <button className="tool-btn hint" onClick={useHint}>💡 hint</button>
       <button className="tool-btn" onClick={() => setWalk(true)}>📖 reveal walkthrough</button>
@@ -79,7 +103,7 @@ export function MissionView({ mission }: { mission: Mission }) {
       <div className="sec-h">EVIDENCE BOARD{pro ? " · professional (no markers)" : ""}</div>
       <div className="evgrid">
         {mission.evidence.map((e) => {
-          const herr = e.redHerring && !pro;
+          const herr = e.redHerring && (!pro || lensUsed);
           return (
             <div key={e.id} className={`ev${herr ? " herring" : ""}`}>
               {herr && <span className="herald">⚑ possible red herring</span>}
